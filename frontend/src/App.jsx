@@ -1,44 +1,60 @@
+// frontend/src/App.jsx
+
 import React, { useState, useEffect } from 'react';
 import ProductList from './components/ProductList';
 import Cart from './components/Cart';
 import CartPage from './components/CartPage';
 import CheckoutPage from './components/CheckoutPage';
 import MobileMenu from './components/MobileMenu';
+import CoverPage from './components/CoverPage'; // 1. Import the new component
 import './App.css';
 import { FaSearch, FaBars } from 'react-icons/fa';
 
 function App() {
   const [products, setProducts] = useState([]);
-  const [cart, setCart] = useState(() => {
-    try {
-      const savedCart = localStorage.getItem('shopping-cart');
-      return savedCart ? JSON.parse(savedCart) : [];
-    } catch (error) {
-      return [];
-    }
-  });
-
+  const [cart, setCart] = useState([]);
   const [isCartVisible, setIsCartVisible] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // <-- 2. ADD NEW STATE
+  const [isMenuVisible, setIsMenuVisible] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [view, setView] = useState('shop');
+  const [showCoverPage, setShowCoverPage] = useState(true); // 2. Add state for cover page
 
+  // Load cart from localStorage on initial render
   useEffect(() => {
-    localStorage.setItem('shopping-cart', JSON.stringify(cart));
+    const savedCart = localStorage.getItem('dressShopCart');
+    if (savedCart) {
+      setCart(JSON.parse(savedCart));
+    }
+  }, []);
+
+  // Save cart to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('dressShopCart', JSON.stringify(cart));
   }, [cart]);
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/products')
-      .then(res => res.json())
+    fetch('/api/products') // Changed to relative path for production
+      .then(res => {
+        if (!res.ok) {
+          throw new Error('Network response was not ok');
+        }
+        return res.json();
+      })
       .then(data => setProducts(data))
       .catch(err => console.error("Failed to fetch products:", err));
   }, []);
 
-  const toggleCart = () => setIsCartVisible(!isCartVisible);
-  const toggleMobileMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen); // <-- 3. ADD NEW TOGGLE FUNCTION
 
-  // ... (All your other functions like addToCart, updateQuantity, etc. remain the same)
+  const toggleCart = () => setIsCartVisible(!isCartVisible);
+  const toggleMenu = () => setIsMenuVisible(!isMenuVisible);
+
+  // 3. Function to enter the shop
+  const handleEnterShop = () => {
+    setShowCoverPage(false);
+  };
+
+  // ... (keep all your existing functions: addToCart, updateQuantity, removeFromCart, etc.)
   const addToCart = (productToAdd, size) => {
     const cartItemId = `${productToAdd.id}-${size}`;
     setCart(prevCart => {
@@ -55,7 +71,11 @@ function App() {
 
   const updateQuantity = (cartItemId, delta) => {
     setCart(prevCart =>
-      prevCart.map(item => item.cartItemId === cartItemId ? { ...item, quantity: item.quantity + delta } : item).filter(item => item.quantity > 0)
+      prevCart
+        .map(item =>
+          item.cartItemId === cartItemId ? { ...item, quantity: item.quantity + delta } : item
+        )
+        .filter(item => item.quantity > 0)
     );
   };
 
@@ -68,10 +88,15 @@ function App() {
     setView('cart');
   };
 
+  const handleCheckout = () => {
+    setIsCartVisible(false);
+    setView('checkout');
+  };
+
   const confirmOrder = async () => {
     if (cart.length === 0) return alert("Your cart is empty!");
     try {
-      const response = await fetch('http://localhost:3001/api/checkout', {
+      const response = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cart }),
@@ -82,9 +107,11 @@ function App() {
       setCart([]);
       setView('shop');
     } catch (error) {
+      console.error('Checkout error:', error);
       alert('There was an error during checkout.');
     }
   };
+
 
   const allTags = ['all', ...new Set(products.flatMap(p => p.tags))];
   const filteredProducts = products
@@ -112,17 +139,23 @@ function App() {
     }
   };
 
+  // 4. Conditional Rendering Logic
+  if (showCoverPage) {
+    return <CoverPage onEnter={handleEnterShop} />;
+  }
+
   return (
     <div className="App">
       <header className="App-header">
-        <h1>DRESS SHOP</h1>
-        <nav>
+        <h1 onClick={() => setView('shop')} style={{ cursor: 'pointer' }}>DRESSIFY</h1>
+        <nav className="desktop-nav">
           <span onClick={() => setView('shop')} style={{ cursor: 'pointer' }}>Shop</span>
           <span onClick={toggleCart} style={{ cursor: 'pointer' }}>Cart ({cart.reduce((sum, item) => sum + item.quantity, 0)})</span>
         </nav>
-        {/* 4. CONNECT ONCLICK TO HAMBURGER BUTTON */}
-        <button className="menu-icon" onClick={toggleMobileMenu}><FaBars /></button>
+        <button className="menu-icon" onClick={toggleMenu}><FaBars /></button>
       </header>
+
+      {isMenuVisible && <MobileMenu setView={setView} toggleMenu={toggleMenu} toggleCart={toggleCart} />}
 
       {renderView()}
 
@@ -130,18 +163,10 @@ function App() {
         <Cart
           cartItems={cart}
           toggleCart={toggleCart}
+          handleCheckout={handleViewCart}
           updateQuantity={updateQuantity}
           removeFromCart={removeFromCart}
           handleViewCart={handleViewCart}
-        />
-      }
-
-      {/* 5. CONDITIONALLY RENDER THE MOBILE MENU */}
-      {isMobileMenuOpen &&
-        <MobileMenu
-          setView={setView}
-          toggleCart={toggleCart}
-          toggleMobileMenu={toggleMobileMenu}
         />
       }
     </div>
